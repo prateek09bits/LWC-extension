@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Salesforce Schema Builder",
+  "version": "1.0",
+  "description": "Schema Builder for Salesforce",
+  "permissions": [
+    "tabs",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.lightning.force.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.lightning.force.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}
