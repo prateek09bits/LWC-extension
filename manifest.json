@@ -7,7 +7,8 @@
     "tabs",
     "storage",
     "activeTab",
-    "scripting"
+    "scripting",
+    "cookies"
   ],
   "host_permissions": [
     "https://*.salesforce.com/*",
@@ -25,8 +26,7 @@
         "https://*.salesforce.com/*",
         "https://*.lightning.force.com/*"
       ],
-      "js": ["content.js"],
-      "css": ["styles.css"]
+      "js": ["content.js"]
     }
   ]
 }

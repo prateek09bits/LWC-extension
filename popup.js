@@ -5,4 +5,8 @@ document.getElementById("launchBtn").addEventListener("click", async () => {
       files: ["content.js"]
     });
   });
+
+  chrome.tabs.create({
+    url: chrome.runtime.getURL("src/app.html")
+  });
 });
