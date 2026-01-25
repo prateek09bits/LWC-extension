@@ -1,15 +1,42 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-    <title>LWC Schema Builder</title>
-    <link rel="stylesheet" href="app.css">
+  <title>LWC Dependency Viewer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      text-align: left;
+      font-size: 13px;
+    }
+    th {
+      background: #f4f4f4;
+    }
+  </style>
 </head>
-
 <body>
-     <h1 id="output">Hello</h1>
 
-    <script src="app.js"></script>
+<h2>⚡ LWC Dependency Graph</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th>Depends On</th>
+    </tr>
+  </thead>
+  <tbody id="dependencyTable"></tbody>
+</table>
+
+<script src="app.js"></script>
 </body>
-
 </html>

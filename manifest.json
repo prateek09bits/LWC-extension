@@ -12,7 +12,7 @@
   ],
   "host_permissions": [
     "https://*.salesforce.com/*",
-    "https://*.lightning.force.com/*"
+    "https://*.force.com/*"
   ],
   "background": {
     "service_worker": "background.js"

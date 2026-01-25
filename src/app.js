@@ -1,12 +1,31 @@
-// let cookies;
+console.log("📦 App UI Loaded");
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log("Message received in background script:", message);
-    if (message && message.type === "salesforce_cookies") {
-        console.log("Received cookies from content script:", message.cookies);
-        // cookies = message.cookies;
-        sendResponse({ status: "ok" });
-    }
+const tableBody = document.getElementById("dependencyTable");
+
+// 🔥 Receive data from background.js
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === "LWC_DEPENDENCY_DATA") {
+    console.log("✅ Data received in app.js:", message.payload);
+    renderTable(message.payload);
+  }
 });
-// console.log(cookies);
-// console.log(typeof cookies);
+
+function renderTable(records) {
+  tableBody.innerHTML = "";
+
+  if (!records || records.length === 0) {
+    tableBody.innerHTML = `<tr><td colspan="2">No dependencies found</td></tr>`;
+    return;
+  }
+
+  records.forEach((rec) => {
+    const row = document.createElement("tr");
+
+    row.innerHTML = `
+      <td>${rec.MetadataComponentName}</td>
+      <td>${rec.RefMetadataComponentName}</td>
+    `;
+
+    tableBody.appendChild(row);
+  });
+}
