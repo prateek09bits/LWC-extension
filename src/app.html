@@ -1,42 +1,313 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>LWC Dependency Viewer</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 12px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 12px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 6px;
-      text-align: left;
-      font-size: 13px;
-    }
-    th {
-      background: #f4f4f4;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salesforce LWC Schema Builder</title>
+    <link rel="stylesheet" href="app.css">
 </head>
 <body>
+    <!-- Main Container -->
+    <div class="schema-builder-container">
+        
+        <!-- Header Bar -->
+        <header class="header-bar">
+            <div class="header-left">
+                <!-- Close Button -->
+                <button class="btn-icon close-btn" id="closeApp" title="Close Schema Builder">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 8.586L3.707 2.293a1 1 0 00-1.414 1.414L8.586 10l-6.293 6.293a1 1 0 001.414 1.414L10 11.414l6.293 6.293a1 1 0 001.414-1.414L11.414 10l6.293-6.293a1 1 0 00-1.414-1.414L10 8.586z"/>
+                    </svg>
+                </button>
 
-<h2>⚡ LWC Dependency Graph</h2>
+                <div class="divider"></div>
 
-<table>
-  <thead>
-    <tr>
-      <th>Component</th>
-      <th>Depends On</th>
-    </tr>
-  </thead>
-  <tbody id="dependencyTable"></tbody>
-</table>
+                <!-- Sidebar Toggle -->
+                <button class="btn-icon sidebar-toggle" id="sidebarToggle" title="Toggle Sidebar">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M3 4h14a1 1 0 010 2H3a1 1 0 010-2zm0 5h14a1 1 0 010 2H3a1 1 0 010-2zm0 5h14a1 1 0 010 2H3a1 1 0 010-2z"/>
+                    </svg>
+                </button>
 
-<script src="app.js"></script>
+                <!-- View Mode Toggle -->
+                <div class="view-mode-toggle">
+                    <button class="mode-btn active" data-mode="relationship" id="relationshipModeBtn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 3a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm0 2a3.5 3.5 0 110-7 3.5 3.5 0 010 7zm5.5 6.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm0 2a3.5 3.5 0 110-7 3.5 3.5 0 010 7zm-11-2a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm0 2a3.5 3.5 0 110-7 3.5 3.5 0 010 7z"/>
+                        </svg>
+                        <span>Relationships</span>
+                    </button>
+                    <button class="mode-btn" data-mode="dataflow" id="dataflowModeBtn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M1 8a.5.5 0 01.5-.5h11.793l-3.147-3.146a.5.5 0 01.708-.708l4 4a.5.5 0 010 .708l-4 4a.5.5 0 01-.708-.708L13.293 8.5H1.5A.5.5 0 011 8z"/>
+                        </svg>
+                        <span>Data Flow</span>
+                    </button>
+                </div>
+
+                <!-- Workspace Badge -->
+                <div class="workspace-badge">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M4 2a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H4zm0 1h8a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V4a1 1 0 011-1z"/>
+                    </svg>
+                    <span class="workspace-name">0 Components • No Workspace</span>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <!-- Action Buttons -->
+                <button class="btn-primary btn-new" id="newWorkspaceBtn" title="Create New Workspace">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 3.5a.5.5 0 01.5.5v4h4a.5.5 0 010 1h-4v4a.5.5 0 01-1 0v-4h-4a.5.5 0 010-1h4v-4a.5.5 0 01.5-.5z"/>
+                    </svg>
+                    <span>New Workspace</span>
+                </button>
+
+                <button class="btn-primary btn-save" id="saveWorkspaceBtn" title="Save Workspace" disabled>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M2 1a1 1 0 00-1 1v12a1 1 0 001 1h12a1 1 0 001-1V2a1 1 0 00-1-1H9.5a1 1 0 00-1 1v7.293l2.646-2.647a.5.5 0 01.708.708l-3.5 3.5a.5.5 0 01-.708 0l-3.5-3.5a.5.5 0 11.708-.708L7.5 9.293V2a2 2 0 012-2H14a2 2 0 012 2v12a2 2 0 01-2 2H2a2 2 0 01-2-2V2a2 2 0 012-2h5.5a.5.5 0 010 1H2z"/>
+                    </svg>
+                    <span>Save</span>
+                </button>
+
+                <!-- More Menu -->
+                <div class="dropdown">
+                    <button class="btn-icon menu-btn" id="moreMenuBtn" title="More Actions">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/>
+                        </svg>
+                    </button>
+                    <div class="dropdown-menu" id="moreMenu">
+                        <button class="dropdown-item" data-action="export">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 12a.5.5 0 00.5-.5V5.707l2.146 2.147a.5.5 0 00.708-.708l-3-3a.5.5 0 00-.708 0l-3 3a.5.5 0 10.708.708L7.5 5.707V11.5a.5.5 0 00.5.5z"/>
+                                <path d="M14 13v2H2v-2H1v2a1 1 0 001 1h12a1 1 0 001-1v-2h-1z"/>
+                            </svg>
+                            Export Schema
+                        </button>
+                        <button class="dropdown-item" data-action="import">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 4a.5.5 0 01.5.5v6.793l2.146-2.147a.5.5 0 01.708.708l-3 3a.5.5 0 01-.708 0l-3-3a.5.5 0 11.708-.708L7.5 11.293V4.5A.5.5 0 018 4z"/>
+                                <path d="M14 13v2H2v-2H1v2a1 1 0 001 1h12a1 1 0 001-1v-2h-1z"/>
+                            </svg>
+                            Import Schema
+                        </button>
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item" data-action="autoLayout">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M1 1.5A1.5 1.5 0 012.5 0h3A1.5 1.5 0 017 1.5v3A1.5 1.5 0 015.5 6h-3A1.5 1.5 0 011 4.5v-3zm8 0A1.5 1.5 0 0110.5 0h3A1.5 1.5 0 0115 1.5v3A1.5 1.5 0 0113.5 6h-3A1.5 1.5 0 019 4.5v-3zm-8 8A1.5 1.5 0 012.5 8h3A1.5 1.5 0 017 9.5v3A1.5 1.5 0 015.5 14h-3A1.5 1.5 0 011 12.5v-3zm8 0A1.5 1.5 0 0110.5 8h3a1.5 1.5 0 011.5 1.5v3a1.5 1.5 0 01-1.5 1.5h-3A1.5 1.5 0 019 12.5v-3z"/>
+                            </svg>
+                            Auto Layout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h3 class="sidebar-title">Components</h3>
+                    <button class="btn-icon" id="closeSidebar" title="Close Sidebar">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M4.646 4.646a.5.5 0 01.708 0L8 7.293l2.646-2.647a.5.5 0 01.708.708L8.707 8l2.647 2.646a.5.5 0 01-.708.708L8 8.707l-2.646 2.647a.5.5 0 01-.708-.708L7.293 8 4.646 5.354a.5.5 0 010-.708z"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Search & Actions -->
+                <div class="sidebar-search">
+                    <div class="component-actions">
+                        <button class="action-link" data-action="addAll">Add All</button>
+                        <span class="action-divider">|</span>
+                        <button class="action-link" data-action="clearAll">Clear All</button>
+                    </div>
+                    <div class="search-box">
+                        <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M11.742 10.344a6.5 6.5 0 10-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 001.415-1.414l-3.85-3.85a1.007 1.007 0 00-.115-.1zM12 6.5a5.5 5.5 0 11-11 0 5.5 5.5 0 0111 0z"/>
+                        </svg>
+                        <input type="search" class="search-input" id="searchInput" placeholder="Search components...">
+                    </div>
+                </div>
+
+                <!-- Component List -->
+                <div class="component-list" id="componentList">
+                    <div class="empty-state">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="currentColor" opacity="0.3">
+                            <path d="M24 4C12.95 4 4 12.95 4 24s8.95 20 20 20 20-8.95 20-20S35.05 4 24 4zm-4 30l-8-8 2.83-2.83L20 28.34l11.17-11.17L34 20l-14 14z"/>
+                        </svg>
+                        <p>Loading components...</p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Canvas Container -->
+            <main class="canvas-container" id="canvasContainer">
+                <!-- Canvas World -->
+                <div class="canvas-world" id="canvasWorld">
+                    <!-- SVG for Connections -->
+                    <svg class="connections-svg" id="connectionsSvg" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <!-- Relationship Mode Markers -->
+                            <marker id="arrowhead-dependency" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                                <polygon points="0 0, 10 3, 0 6" fill="#0176d3"/>
+                            </marker>
+                            <marker id="arrowhead-apex" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                                <polygon points="0 0, 10 3, 0 6" fill="#fe9339"/>
+                            </marker>
+                            
+                            <!-- Data Flow Mode Markers -->
+                            <marker id="arrowhead-publish" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                                <polygon points="0 0, 10 3, 0 6" fill="#2e844a"/>
+                            </marker>
+                            <marker id="arrowhead-subscribe" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                                <polygon points="0 0, 10 3, 0 6" fill="#8b44ac"/>
+                            </marker>
+                            <marker id="arrowhead-dispatch" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                                <polygon points="0 0, 10 3, 0 6" fill="#e3165b"/>
+                            </marker>
+                            <marker id="arrowhead-listen" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                                <polygon points="0 0, 10 3, 0 6" fill="#0070d2"/>
+                            </marker>
+                        </defs>
+                    </svg>
+
+                    <!-- Nodes will be dynamically inserted here -->
+                </div>
+
+                <!-- Zoom Controls -->
+                <div class="zoom-controls">
+                    <button class="zoom-btn" id="zoomInBtn" title="Zoom In">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 5a.75.75 0 01.75.75v3.5h3.5a.75.75 0 010 1.5h-3.5v3.5a.75.75 0 01-1.5 0v-3.5h-3.5a.75.75 0 010-1.5h3.5v-3.5A.75.75 0 0110 5z"/>
+                        </svg>
+                    </button>
+                    <div class="zoom-level" id="zoomLevel">100%</div>
+                    <button class="zoom-btn" id="zoomOutBtn" title="Zoom Out">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M5.75 9.25a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5z"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Canvas Empty State -->
+                <div class="canvas-empty-state" id="canvasEmptyState">
+                    <svg width="64" height="64" viewBox="0 0 64 64" fill="currentColor" opacity="0.2">
+                        <path d="M32 8C18.745 8 8 18.745 8 32s10.745 24 24 24 24-10.745 24-24S45.255 8 32 8zm0 44c-11.028 0-20-8.972-20-20s8.972-20 20-20 20 8.972 20 20-8.972 20-20 20z"/>
+                        <path d="M32 16a4 4 0 100 8 4 4 0 000-8zM20 32a4 4 0 100 8 4 4 0 000-8zM44 32a4 4 0 100 8 4 4 0 000-8z"/>
+                    </svg>
+                    <h3>Drag components here</h3>
+                    <p>Start building your LWC architecture schema</p>
+                </div>
+
+                <!-- Legend -->
+                <div class="legend" id="legend">
+                    <!-- Relationship Mode Legend -->
+                    <div class="legend-section" data-mode="relationship">
+                        <h4>Relationships</h4>
+                        <div class="legend-item">
+                            <div class="legend-line" style="background: #0176d3;"></div>
+                            <span>LWC Dependency</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line" style="background: #fe9339; border-style: dashed;"></div>
+                            <span>Apex Class</span>
+                        </div>
+                    </div>
+
+                    <!-- Data Flow Mode Legend -->
+                    <div class="legend-section hidden" data-mode="dataflow">
+                        <h4>Data Flow</h4>
+                        <div class="legend-item">
+                            <div class="legend-line" style="background: #2e844a;"></div>
+                            <span>Publish Event</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line" style="background: #8b44ac;"></div>
+                            <span>Subscribe Event</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line" style="background: #e3165b; border-style: dashed;"></div>
+                            <span>Dispatch (Custom)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-line" style="background: #0070d2; border-style: dashed;"></div>
+                            <span>Listen (Custom)</span>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Workspace Modal -->
+        <div class="modal" id="workspaceModal">
+            <div class="modal-overlay"></div>
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h2>Manage Workspaces</h2>
+                    <button class="btn-icon" id="closeWorkspaceModal">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 8.586L3.707 2.293a1 1 0 00-1.414 1.414L8.586 10l-6.293 6.293a1 1 0 001.414 1.414L10 11.414l6.293 6.293a1 1 0 001.414-1.414L11.414 10l6.293-6.293a1 1 0 00-1.414-1.414L10 8.586z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="workspace-create">
+                        <h3>Create New Workspace</h3>
+                        <div class="input-group">
+                            <input type="text" class="input-field" id="newWorkspaceName" placeholder="Enter workspace name...">
+                            <button class="btn-primary" id="createWorkspaceBtn" disabled>Create</button>
+                        </div>
+                    </div>
+                    <div class="workspace-list-section">
+                        <h3>Your Workspaces</h3>
+                        <div class="workspace-list" id="workspaceList">
+                            <div class="empty-state">
+                                <p>No workspaces yet. Create one to get started!</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export Modal -->
+        <div class="modal" id="exportModal">
+            <div class="modal-overlay"></div>
+            <div class="modal-container modal-small">
+                <div class="modal-header">
+                    <h2>Export Workspace</h2>
+                    <button class="btn-icon" id="closeExportModal">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10 8.586L3.707 2.293a1 1 0 00-1.414 1.414L8.586 10l-6.293 6.293a1 1 0 001.414 1.414L10 11.414l6.293 6.293a1 1 0 001.414-1.414L11.414 10l6.293-6.293a1 1 0 00-1.414-1.414L10 8.586z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="checkbox-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="exportJson" checked>
+                            <span>Export as JSON</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="exportImage" checked>
+                            <span>Export as SVG Image</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" id="cancelExport">Cancel</button>
+                    <button class="btn-primary" id="downloadExport">Download</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden File Input for Import -->
+        <input type="file" id="fileInput" accept=".json" style="display: none;">
+    </div>
+
+    <script src="app.js"></script>
 </body>
 </html>
