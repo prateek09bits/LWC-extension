@@ -1,4 +1,4 @@
-console.log("🚀 Salesforce LWC Schema Builder - Background Service Worker v4.0");
+console.log("🚀 Salesforce LWC Schema Builder - Background Service Worker v5.0 (Industry Edition)");
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -55,7 +55,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       try {
         const payload = await fetchLWCDependencies(instanceUrl, sessionId);
-        
+
         chrome.runtime.sendMessage({
           type: "LWC_DEPENDENCY_DATA",
           payload: payload
@@ -89,8 +89,8 @@ async function fetchLWCDependencies(instanceUrl, sessionId) {
     const bundlesWithSource = await fetchAllBundleSources(instanceUrl, sessionId, bundles);
     console.log(`✅ Fetched source files for all bundles`);
 
-    const parsedBundles = bundlesWithSource.map(bundle => 
-      parseComponentDataFlow(bundle)
+    const parsedBundles = bundlesWithSource.map(bundle =>
+      parseLwcDataFlow(bundle)
     );
 
     console.log("🎉 Data processing complete!");
@@ -113,12 +113,12 @@ async function fetchLWCDependencies(instanceUrl, sessionId) {
 async function fetchLightningComponentBundles(instanceUrl, sessionId) {
   const query = `
     SELECT Id, DeveloperName, NamespacePrefix, Description
-    FROM LightningComponentBundle
+    FROM LightningComponentBundle WHERE NamespacePrefix != 'devedapp'
     ORDER BY DeveloperName
   `;
 
   const url = `${instanceUrl}/services/data/v60.0/tooling/query?q=${encodeURIComponent(query)}`;
-  
+
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${sessionId}`,
@@ -152,7 +152,7 @@ async function fetchMetadataComponentDependencies(instanceUrl, sessionId) {
   `;
 
   const url = `${instanceUrl}/services/data/v60.0/tooling/query?q=${encodeURIComponent(query)}`;
-  
+
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${sessionId}`,
@@ -184,7 +184,7 @@ async function fetchAllBundleSources(instanceUrl, sessionId, bundles) {
     const batch = sourcePromises.slice(i, i + batchSize);
     const batchResults = await Promise.all(batch);
     results.push(...batchResults);
-    
+
     console.log(`📦 Processed ${Math.min(i + batchSize, sourcePromises.length)}/${sourcePromises.length} components`);
   }
 
@@ -239,8 +239,8 @@ async function fetchBundleSourceFiles(instanceUrl, sessionId, bundle) {
     const jsData = await jsResponse.json();
     const htmlData = await htmlResponse.json();
 
-    const jsFile = jsData.records?.find(r => 
-      r.FilePath.endsWith('.js') && 
+    const jsFile = jsData.records?.find(r =>
+      r.FilePath.endsWith('.js') &&
       !r.FilePath.includes('test') &&
       !r.FilePath.includes('__')
     );
@@ -273,136 +273,157 @@ async function fetchBundleSourceFiles(instanceUrl, sessionId, bundle) {
 }
 
 // ============================================================================
-// SOURCE CODE PARSER - EXTRACT DATA FLOW PATTERNS
+// ENHANCED LWC DATA FLOW PARSER (INDUSTRY-LEVEL)
 // ============================================================================
 
-function parseComponentDataFlow(component) {
-  const { name, jsSource, htmlSource } = component;
+function parseLwcDataFlow(bundle) {
+  const result = {
+    component: bundle.name,
+    bundleId: bundle.id,
 
-  const dataFlow = {
-    apiProperties: [],
-    dispatchedEvents: [],
-    wireAdapters: [],
+    // Child @api exposed surface
+    apiProps: [],
+
+    // <c-child prop={value}>
     childComponents: [],
-    messageChannelPublish: [],
-    messageChannelSubscribe: []
+
+    // this.dispatchEvent(...)
+    events: [],
+
+    // @wire(...)
+    wires: [],
+
+    // template.querySelector patterns
+    querySelectorCalls: [],
+
+    // Lightning Message Service
+    lmsChannels: []
   };
 
-  if (jsSource) {
-    // Extract @api properties (including getters/setters)
-    const apiRegex = /@api\s+(?:get\s+)?(\w+)/g;
-    let match;
-    const foundProps = new Set();
-    while ((match = apiRegex.exec(jsSource)) !== null) {
-      if (!foundProps.has(match[1])) {
-        foundProps.add(match[1]);
-        dataFlow.apiProperties.push({
-          name: match[1],
-          type: 'parent-to-child',
-          decorator: '@api'
-        });
-      }
+  /* ===========================
+     ENHANCED JS PARSING
+     =========================== */
+
+  if (bundle.jsSource) {
+    const js = bundle.jsSource;
+
+    // ---- @api props (field + getter/setter)
+    const apiSet = new Set();
+    const apiRegex = /@api\s+(?:get\s+|set\s+)?(\w+)/g;
+    let m;
+    while ((m = apiRegex.exec(js))) {
+      apiSet.add(m[1]);
+    }
+    result.apiProps = [...apiSet];
+
+    // ---- CustomEvent dispatch with detail extraction
+    const eventRegex =
+      /this\.dispatchEvent\s*\(\s*new\s+CustomEvent\s*\(\s*['\"`]([^'\"`]+)['\"`](?:\s*,\s*\{[^}]*detail\s*:\s*([^}]+)\})?/g;
+    while ((m = eventRegex.exec(js))) {
+      result.events.push({
+        name: m[1],
+        direction: "child-to-parent",
+        detail: m[2] ? m[2].trim() : null
+      });
     }
 
-    // Extract dispatched CustomEvents with detail analysis
-    const dispatchRegex = /this\.dispatchEvent\s*\(\s*new\s+CustomEvent\s*\(\s*['"`]([^'"`]+)['"`]\s*(?:,\s*\{([^}]*)\})?\s*\)\s*\)/g;
-    const foundEvents = new Set();
-    while ((match = dispatchRegex.exec(jsSource)) !== null) {
-      if (!foundEvents.has(match[1])) {
-        foundEvents.add(match[1]);
-        dataFlow.dispatchedEvents.push({
-          name: match[1],
-          type: 'child-to-parent',
-          method: 'CustomEvent'
-        });
-      }
-    }
-
-    // Extract @wire adapters
+    // ---- @wire adapters with parameters
     const wireRegex = /@wire\s*\(\s*(\w+)(?:\s*,\s*\{([^}]+)\})?\s*\)/g;
-    while ((match = wireRegex.exec(jsSource)) !== null) {
-      dataFlow.wireAdapters.push({
-        adapter: match[1],
-        params: match[2] ? match[2].trim() : '',
-        type: 'data-source'
+    while ((m = wireRegex.exec(js))) {
+      result.wires.push({
+        adapter: m[1],
+        params: m[2] ? m[2].trim() : null
       });
     }
 
-    // Extract Lightning Message Service - Publish
-    const publishImportRegex = /import\s+\{\s*publish\s*\}/gi;
-    const publishCallRegex = /publish\s*\(\s*this\.messageContext\s*,\s*(\w+)\s*,/g;
-    if (publishImportRegex.test(jsSource)) {
-      while ((match = publishCallRegex.exec(jsSource)) !== null) {
-        dataFlow.messageChannelPublish.push({
-          channel: match[1],
-          type: 'message-publish'
-        });
-      }
+    // ---- Template querySelector calls (parent calling child methods)
+    const querySelectorRegex = /this\.template\.querySelector\s*\(\s*['\"`]c-([a-z0-9-]+)['\"`]\s*\)\.(\w+)/g;
+    while ((m = querySelectorRegex.exec(js))) {
+      result.querySelectorCalls.push({
+        childComponent: kebabToCamel(m[1]),
+        method: m[2],
+        direction: "parent-to-child"
+      });
     }
 
-    // Extract Lightning Message Service - Subscribe
-    const subscribeImportRegex = /import\s+\{\s*subscribe\s*\}/gi;
-    const subscribeCallRegex = /subscribe\s*\(\s*this\.messageContext\s*,\s*(\w+)\s*,/g;
-    if (subscribeImportRegex.test(jsSource)) {
-      while ((match = subscribeCallRegex.exec(jsSource)) !== null) {
-        dataFlow.messageChannelSubscribe.push({
-          channel: match[1],
-          type: 'message-subscribe'
-        });
-      }
+    // ---- Lightning Message Service patterns
+    const lmsPublishRegex = /publish\s*\(\s*this\.messageContext\s*,\s*(\w+)/g;
+    const lmsSubscribeRegex = /subscribe\s*\(\s*this\.messageContext\s*,\s*(\w+)/g;
+
+    while ((m = lmsPublishRegex.exec(js))) {
+      result.lmsChannels.push({
+        channel: m[1],
+        type: 'publish'
+      });
     }
-  }
 
-  if (htmlSource) {
-    // Extract child component usage with enhanced attribute parsing
-    const childCompRegex = /<c-([a-z0-9-]+)([^>]*?)(?:>|\/?>)/gi;
-    while ((match = childCompRegex.exec(htmlSource)) !== null) {
-      const componentName = match[1];
-      const attributes = match[2];
-
-      const propBindings = [];
-      // Match property bindings (non-event attributes)
-      const propRegex = /(\w+(?:-\w+)*)=(?:\{([^}]+)\}|"([^"]+)"|'([^']+)')/g;
-      let propMatch;
-      while ((propMatch = propRegex.exec(attributes)) !== null) {
-        const attrName = propMatch[1];
-        
-        // Skip event handlers (start with 'on')
-        if (attrName.toLowerCase().startsWith('on')) continue;
-        
-        const boundValue = propMatch[2] || propMatch[3] || propMatch[4];
-        
-        propBindings.push({
-          property: attrName,
-          boundTo: boundValue ? boundValue.trim() : '',
-          flow: 'parent-to-child'
-        });
-      }
-
-      const eventBindings = [];
-      // Match event handlers (attributes starting with 'on')
-      const eventRegex = /on([a-z]+)=\{([^}]+)\}/gi;
-      let eventMatch;
-      while ((eventMatch = eventRegex.exec(attributes)) !== null) {
-        eventBindings.push({
-          event: eventMatch[1].toLowerCase(),
-          handler: eventMatch[2].trim(),
-          flow: 'child-to-parent'
-        });
-      }
-
-      dataFlow.childComponents.push({
-        name: componentName,
-        propertyBindings: propBindings,
-        eventHandlers: eventBindings
+    while ((m = lmsSubscribeRegex.exec(js))) {
+      result.lmsChannels.push({
+        channel: m[1],
+        type: 'subscribe'
       });
     }
   }
 
-  return {
-    ...component,
-    dataFlow
-  };
+  /* ===========================
+     ENHANCED HTML PARSING
+     =========================== */
+
+  if (bundle.htmlSource) {
+    const html = bundle.htmlSource;
+
+    const childRegex = /<c-([a-z0-9-]+)([^>]*)>/gi;
+    let match;
+
+    while ((match = childRegex.exec(html))) {
+      const childName = match[1];
+      const attrs = match[2];
+
+      const props = [];
+      const events = [];
+
+      // Props: message={foo} or message="literal"
+      const attrRegex = /([\w-]+)=(?:\{([^}]+)\}|"([^"]+)"|'([^']+)')/g;
+      let a;
+      while ((a = attrRegex.exec(attrs))) {
+        const attr = a[1];
+        const value = a[2] || a[3] || a[4]; // Handle {}, "", ''
+
+        if (attr.startsWith("on")) {
+          // Event handler
+          events.push({
+            event: attr.replace("on", ""),
+            handler: value,
+            direction: "child-to-parent"
+          });
+        } else {
+          // Property binding
+          props.push({
+            api: kebabToCamel(attr),
+            parentValue: value,
+            direction: "parent-to-child",
+            isLiteral: !a[2] // true if not using {}
+          });
+        }
+      }
+
+      result.childComponents.push({
+        name: childName,
+        props,
+        events
+      });
+    }
+  }
+
+  return result;
 }
 
-console.log("✅ Background service worker fully initialized");
+/* ===========================
+   HELPER FUNCTIONS
+   =========================== */
+
+function kebabToCamel(str) {
+  return str.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+console.log("✅ Background service worker fully initialized (Industry Edition)");

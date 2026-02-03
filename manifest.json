@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Salesforce Schema Builder",
-  "version": "1.0",
-  "description": "Schema Builder for Salesforce",
+  "name": "Salesforce LWC Schema Builder",
+  "version": "2.0",
+  "description": "Industry-Level Schema Builder for Salesforce Lightning Web Components",
   "permissions": [
     "tabs",
     "storage",
