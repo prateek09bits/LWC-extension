@@ -119,23 +119,18 @@ class DataFlowConnectionRenderer {
                 childUsage.props?.forEach(propBinding => {
                     const apiName = propBinding.api;
 
-                    // Check if child has this @api property
+                    // Check if child has this @api property (optional validation)
                     const hasApi = childComp.dataFlow.apiProps?.includes(apiName);
 
-                    if (hasApi) {
-                        const key = `p2c-${parentNode.id}-${childNode.id}-${apiName}`;
-                        if (!drawn.has(key)) {
-                            drawn.add(key);
-                            console.log(`    ✅ PARENT→CHILD: ${apiName}`);
-                            connections.push({
-                                from: parentNode,
-                                to: childNode,
-                                type: 'publish',
-                                label: `@api ${apiName}`
-                            });
-                        }
-                    } else {
-                        console.log(`    ⚠️ No @api found for: ${apiName}`);
+                    const key = `p2c-${parentNode.id}-${childNode.id}-${apiName}`;
+                    if (!drawn.has(key)) {
+                        drawn.add(key);
+                        connections.push({
+                            from: parentNode,
+                            to: childNode,
+                            type: 'publish',
+                            label: `via api (${apiName})`
+                        });
                     }
                 });
 
@@ -148,20 +143,15 @@ class DataFlowConnectionRenderer {
                         e => e.name.toLowerCase() === eventName.toLowerCase()
                     );
 
-                    if (hasEvent) {
-                        const key = `c2p-${childNode.id}-${parentNode.id}-${eventName}`;
-                        if (!drawn.has(key)) {
-                            drawn.add(key);
-                            console.log(`    ✅ CHILD→PARENT: ${eventName}`);
-                            connections.push({
-                                from: childNode,
-                                to: parentNode,
-                                type: 'dispatch',
-                                label: `event: ${eventName}`
-                            });
-                        }
-                    } else {
-                        console.log(`    ⚠️ No dispatch found for: ${eventName}`);
+                    const key = `c2p-${childNode.id}-${parentNode.id}-${eventName}`;
+                    if (!drawn.has(key)) {
+                        drawn.add(key);
+                        connections.push({
+                            from: childNode,
+                            to: parentNode,
+                            type: 'dispatch',
+                            label: `custom event(${eventName})`
+                        });
                     }
                 });
             });
@@ -212,7 +202,7 @@ class DataFlowConnectionRenderer {
                                 from: fromNode,
                                 to: toNode,
                                 type: 'message',
-                                label: `LMS: ${lms.channel}`
+                                label: `publish(${toNode.label})`
                             });
                         }
                     }
