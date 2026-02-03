@@ -113,7 +113,7 @@ async function fetchLWCDependencies(instanceUrl, sessionId) {
 async function fetchLightningComponentBundles(instanceUrl, sessionId) {
   const query = `
     SELECT Id, DeveloperName, NamespacePrefix, Description
-    FROM LightningComponentBundle
+    FROM LightningComponentBundle WHERE NamespacePrefix != 'devedapp'
     ORDER BY DeveloperName
   `;
 
