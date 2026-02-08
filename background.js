@@ -1,4 +1,4 @@
-console.log("🚀 Salesforce LWC Schema Builder - Background Service Worker v5.0 (Industry Edition)");
+console.log("🚀 Salesforce LWC Schema Builder - Background Service Worker v5.1 (Refresh Fix)");
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -31,11 +31,13 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 });
 
 // ============================================================================
-// MESSAGE LISTENER - MAIN ENTRY POINT
+// MESSAGE LISTENER - MAIN ENTRY POINT (FIXED FOR REFRESH)
 // ============================================================================
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "FETCH_LWC_DEPENDENCY") {
+    console.log("📥 Received FETCH_LWC_DEPENDENCY request");
+    
     const urlObj = new URL(message.url);
     const host = urlObj.hostname.replace(
       ".lightning.force.com",
@@ -55,20 +57,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       try {
         const payload = await fetchLWCDependencies(instanceUrl, sessionId);
+        console.log(`📦 Data fetched: ${payload.bundles.length} components`);
 
+        // CRITICAL FIX: Send message back to ALL extension contexts
+        // This ensures the data reaches the UI whether it's freshly opened or refreshed
         chrome.runtime.sendMessage({
           type: "LWC_DEPENDENCY_DATA",
           payload: payload
+        }).catch(err => {
+          // Ignore "no receivers" error - normal if extension just opened
+          console.log("ℹ️ Message sent (no active receivers yet)");
         });
 
-        sendResponse({ status: "ok", componentsCount: payload.bundles.length });
+        sendResponse({ 
+          status: "ok", 
+          componentsCount: payload.bundles.length,
+          timestamp: new Date().toISOString()
+        });
       } catch (err) {
         console.error("❌ Error fetching dependencies:", err);
         sendResponse({ error: err.message });
       }
     });
 
-    return true;
+    return true; // CRITICAL: Keep message channel open for async response
   }
 });
 
@@ -89,6 +101,9 @@ async function fetchLWCDependencies(instanceUrl, sessionId) {
     const bundlesWithSource = await fetchAllBundleSources(instanceUrl, sessionId, bundles);
     console.log(`✅ Fetched source files for all bundles`);
 
+    const messageChannels = await fetchLightningMessageChannels(instanceUrl, sessionId);
+    console.log(`✅ Fetched ${messageChannels.length} message channels`);
+
     const parsedBundles = bundlesWithSource.map(bundle =>
       parseLwcDataFlow(bundle)
     );
@@ -97,7 +112,8 @@ async function fetchLWCDependencies(instanceUrl, sessionId) {
 
     return {
       bundles: parsedBundles,
-      dependencies: dependencies
+      dependencies: dependencies,
+      messageChannels: messageChannels
     };
 
   } catch (error) {
@@ -162,6 +178,35 @@ async function fetchMetadataComponentDependencies(instanceUrl, sessionId) {
 
   if (!response.ok) {
     throw new Error(`Failed to fetch dependencies: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.records || [];
+}
+
+// ============================================================================
+// TOOLING API - FETCH LIGHTNING MESSAGE CHANNELS
+// ============================================================================
+
+async function fetchLightningMessageChannels(instanceUrl, sessionId) {
+  const query = `
+    SELECT Id, DeveloperName, MasterLabel, Description 
+    FROM LightningMessageChannel 
+    ORDER BY DeveloperName
+  `;
+
+  const url = `${instanceUrl}/services/data/v60.0/tooling/query?q=${encodeURIComponent(query)}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${sessionId}`,
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    console.warn(`Failed to fetch message channels: ${response.statusText}`);
+    return [];
   }
 
   const data = await response.json();
@@ -347,19 +392,34 @@ function parseLwcDataFlow(bundle) {
     }
 
     // ---- Lightning Message Service patterns
+
+    // 1. Parse Imports to map variable names to Channel Names
+    // import SAMPLEMC from '@salesforce/messageChannel/SampleMessageChannel__c';
+    const lmsImportRegex = /import\s+(\w+)\s+from\s+['"]@salesforce\/messageChannel\/(\w+)(?:__c)?['"]/g;
+    const lmsMap = new Map(); // Variable -> ChannelName
+    while ((m = lmsImportRegex.exec(js))) {
+      const rawName = m[2];
+      const cleanName = rawName.endsWith('__c') ? rawName.slice(0, -3) : rawName;
+      lmsMap.set(m[1], cleanName);
+    }
+
     const lmsPublishRegex = /publish\s*\(\s*this\.messageContext\s*,\s*(\w+)/g;
     const lmsSubscribeRegex = /subscribe\s*\(\s*this\.messageContext\s*,\s*(\w+)/g;
 
     while ((m = lmsPublishRegex.exec(js))) {
+      const varName = m[1];
+      const channelName = lmsMap.get(varName) || varName; // Resolve or use as-is
       result.lmsChannels.push({
-        channel: m[1],
+        channel: channelName,
         type: 'publish'
       });
     }
 
     while ((m = lmsSubscribeRegex.exec(js))) {
+      const varName = m[1];
+      const channelName = lmsMap.get(varName) || varName; // Resolve or use as-is
       result.lmsChannels.push({
-        channel: m[1],
+        channel: channelName,
         type: 'subscribe'
       });
     }
@@ -426,4 +486,4 @@ function kebabToCamel(str) {
   return str.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 }
 
-console.log("✅ Background service worker fully initialized (Industry Edition)");
+console.log("✅ Background service worker fully initialized (Refresh Fix Edition)");

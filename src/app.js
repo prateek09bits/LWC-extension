@@ -1,9 +1,10 @@
 // ============================================================================
 // LWC SCHEMA BUILDER - ENTERPRISE ARCHITECTURE VISUALIZATION
 // Factory Pattern Implementation with Separation of Concerns
+// v5.1 - REFRESH FIX EDITION
 // ============================================================================
 
-console.log("🚀 Initializing Professional LWC Schema Builder...");
+console.log("🚀 Initializing Professional LWC Schema Builder (Refresh Fix)...");
 
 // ============================================================================
 // FACTORY PATTERN: CONNECTION RENDERER FACTORY
@@ -50,6 +51,23 @@ class RelationshipConnectionRenderer {
                             to: targetNode,
                             type: 'dependency',
                             label: ''
+                        });
+                    }
+                }
+            });
+
+            // Draw LWC-to-MessageChannel dependencies
+            comp.messageChannels?.forEach(channelName => {
+                const targetNode = nodes.find(n => n.label === channelName);
+                if (targetNode) {
+                    const key = `${node.label}-${channelName}`;
+                    if (!drawn.has(key)) {
+                        drawn.add(key);
+                        connections.push({
+                            from: node,
+                            to: targetNode,
+                            type: 'message',
+                            label: 'channels'
                         });
                     }
                 }
@@ -180,7 +198,28 @@ class DataFlowConnectionRenderer {
 
             // LMS: Message Channel connections
             df.lmsChannels?.forEach(lms => {
-                // Find other components using the same channel
+                // 1. Link to actual Message Channel Node if present
+                const lmsNode = nodes.find(n => n.label === lms.channel);
+                if (lmsNode) {
+                    const lmcComp = allComponents.find(c => c.name === lmsNode.label);
+                    if (lmcComp?.type === 'lmc') {
+                        const key = `lms-direct-${parentNode.id}-${lmsNode.id}`;
+                        if (!drawn.has(key)) {
+                            drawn.add(key);
+                            const fromNode = lms.type === 'publish' ? parentNode : lmsNode;
+                            const toNode = lms.type === 'publish' ? lmsNode : parentNode;
+
+                            connections.push({
+                                from: fromNode,
+                                to: toNode,
+                                type: 'message',
+                                label: lms.type // 'publish' or 'subscribe'
+                            });
+                        }
+                    }
+                }
+
+                // 2. Link Component-to-Component (Fallback/Implicit)
                 nodes.forEach(otherNode => {
                     if (otherNode.id === parentNode.id) return;
 
@@ -522,6 +561,11 @@ class LWCSchemaBuilder {
         this.connectionDrawer = null;
         this.animationFrame = null;
 
+        // REFRESH FIX: Data loading state
+        this.isLoadingData = false;
+        this.dataLoadAttempts = 0;
+        this.maxDataLoadAttempts = 3;
+
         this.init();
     }
 
@@ -533,8 +577,15 @@ class LWCSchemaBuilder {
         this.cacheElements();
         this.bindEvents();
         this.loadWorkspaces();
+        
+        // REFRESH FIX: Try to load cached data first
+        this.loadCachedData();
+        
+        // REFRESH FIX: Always request fresh data from background
+        this.requestDataFromBackground();
+        
         this.updateUI();
-        console.log("✅ LWC Schema Builder initialized");
+        console.log("✅ LWC Schema Builder initialized (Refresh Fix)");
     }
 
     cacheElements() {
@@ -646,20 +697,84 @@ class LWCSchemaBuilder {
             }
         });
 
-        // Chrome messaging
+        // REFRESH FIX: Enhanced Chrome messaging with retry logic
         if (typeof chrome !== 'undefined' && chrome.runtime) {
-            chrome.runtime.onMessage.addListener((msg) => {
+            chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 if (msg.type === "LWC_DEPENDENCY_DATA") {
-                    console.log("✅ Received data:", msg.payload);
+                    console.log("✅ Received data from background:", msg.payload);
                     this.processSalesforceMetadata(msg.payload);
+                    this.isLoadingData = false;
+                    sendResponse({ received: true });
                 }
-            });
-
-            chrome.runtime.sendMessage({
-                type: "FETCH_LWC_DEPENDENCY",
-                url: window.location.href
+                return true; // Keep channel open
             });
         }
+    }
+
+    // ========================================================================
+    // REFRESH FIX: DATA LOADING & CACHING
+    // ========================================================================
+
+    loadCachedData() {
+        try {
+            const cached = localStorage.getItem('lwc_schema_cached_data');
+            if (cached) {
+                const data = JSON.parse(cached);
+                const age = Date.now() - (data.timestamp || 0);
+                
+                // Use cached data if less than 5 minutes old
+                if (age < 5 * 60 * 1000) {
+                    console.log("📦 Loading cached component data...");
+                    this.processSalesforceMetadata(data.payload);
+                    return true;
+                }
+            }
+        } catch (err) {
+            console.warn("⚠️ Failed to load cached data:", err);
+        }
+        return false;
+    }
+
+    requestDataFromBackground() {
+        if (this.isLoadingData) {
+            console.log("⏳ Data load already in progress...");
+            return;
+        }
+
+        if (this.dataLoadAttempts >= this.maxDataLoadAttempts) {
+            console.error("❌ Max data load attempts reached");
+            return;
+        }
+
+        if (typeof chrome === 'undefined' || !chrome.runtime) {
+            console.warn("⚠️ Chrome runtime not available");
+            return;
+        }
+
+        this.isLoadingData = true;
+        this.dataLoadAttempts++;
+
+        console.log(`📡 Requesting data from background (attempt ${this.dataLoadAttempts})...`);
+
+        chrome.runtime.sendMessage({
+            type: "FETCH_LWC_DEPENDENCY",
+            url: window.location.href
+        }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.error("❌ Message error:", chrome.runtime.lastError);
+                this.isLoadingData = false;
+                
+                // Retry after 2 seconds
+                if (this.dataLoadAttempts < this.maxDataLoadAttempts) {
+                    setTimeout(() => this.requestDataFromBackground(), 2000);
+                }
+            } else if (response?.error) {
+                console.error("❌ Background error:", response.error);
+                this.isLoadingData = false;
+            } else {
+                console.log("✅ Data request acknowledged:", response);
+            }
+        });
     }
 
     // ========================================================================
@@ -692,10 +807,21 @@ class LWCSchemaBuilder {
     processSalesforceMetadata(data) {
         console.log("🔥 Processing metadata...");
 
-        const { bundles, dependencies } = data;
+        const { bundles, dependencies, messageChannels } = data;
         if (!bundles || !Array.isArray(bundles)) {
             console.error("❌ Invalid data");
             return;
+        }
+
+        // REFRESH FIX: Cache the data
+        try {
+            localStorage.setItem('lwc_schema_cached_data', JSON.stringify({
+                payload: data,
+                timestamp: Date.now()
+            }));
+            console.log("💾 Cached component data");
+        } catch (err) {
+            console.warn("⚠️ Failed to cache data:", err);
         }
 
         this.rawDependencies = dependencies || [];
@@ -725,7 +851,7 @@ class LWCSchemaBuilder {
         });
 
         // Process components with BOTH modes
-        this.allComponents = bundles.map(bundle => {
+        const bundleComponents = bundles.map(bundle => {
             const deps = depMap.get(bundle.component || bundle.name) || {
                 apexClasses: [],
                 lwcDependencies: [],
@@ -737,6 +863,7 @@ class LWCSchemaBuilder {
                 name: bundle.component,
                 namespace: bundle.namespace,
                 description: bundle.description,
+                type: 'lwc',
                 // Relationship data
                 apexClasses: deps.apexClasses,
                 lwcDependencies: deps.lwcDependencies,
@@ -747,11 +874,27 @@ class LWCSchemaBuilder {
                     apiProps: bundle.apiProps || [],
                     events: bundle.events || [],
                     childComponents: bundle.childComponents || [],
-                    wires: bundle.wires || []
+                    wires: bundle.wires || [],
+                    querySelectorCalls: bundle.querySelectorCalls || [],
+                    lmsChannels: bundle.lmsChannels || []
                 }
             };
         });
 
+        // Process Message Channels
+        const lmcComponents = (messageChannels || []).map(mc => ({
+            id: mc.Id,
+            name: mc.DeveloperName,
+            namespace: 'c',
+            description: mc.Description,
+            type: 'lmc',
+            apexClasses: [],
+            lwcDependencies: [],
+            messageChannels: [],
+            dataFlow: {}
+        }));
+
+        this.allComponents = [...bundleComponents, ...lmcComponents];
         this.availableComponents = [...this.allComponents];
         this.connectionRenderer = ConnectionRendererFactory.createRenderer(this.viewMode);
         this.renderComponentList();
@@ -795,6 +938,9 @@ class LWCSchemaBuilder {
             item.dataset.name = comp.name;
 
             const badges = [];
+            if (comp.type === 'lmc') {
+                badges.push(`<span class="badge badge-lms" style="background: #8b44ac; color: white;">Message Channel</span>`);
+            }
             if (comp.hasApexClasses) {
                 badges.push(`<span class="badge badge-apex">${comp.apexClasses.length} Apex</span>`);
             }
@@ -919,7 +1065,6 @@ class LWCSchemaBuilder {
             this.els.canvasWorld.appendChild(el);
 
             // Measure and store dimensions for coordinate-based connections
-            // varying width based on content requires this measurement
             node.width = el.offsetWidth;
             node.height = el.offsetHeight;
         });
@@ -1638,4 +1783,4 @@ if (document.readyState === 'loading') {
     window.lwcSchemaBuilder = new LWCSchemaBuilder();
 }
 
-console.log("✅ Professional LWC Schema Builder loaded");
+console.log("✅ Professional LWC Schema Builder loaded (Refresh Fix Edition)");
