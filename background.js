@@ -1,4 +1,4 @@
-console.log("🚀 Salesforce LWC Schema Builder - Background Service Worker v5.1 (Refresh Fix)");
+console.log("🚀 Salesforce LWC Schema Builder - Background Service Worker v5.2 (Enhanced Message Channel Parsing)");
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -60,12 +60,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log(`📦 Data fetched: ${payload.bundles.length} components`);
 
         // CRITICAL FIX: Send message back to ALL extension contexts
-        // This ensures the data reaches the UI whether it's freshly opened or refreshed
         chrome.runtime.sendMessage({
           type: "LWC_DEPENDENCY_DATA",
           payload: payload
         }).catch(err => {
-          // Ignore "no receivers" error - normal if extension just opened
           console.log("ℹ️ Message sent (no active receivers yet)");
         });
 
@@ -113,7 +111,8 @@ async function fetchLWCDependencies(instanceUrl, sessionId) {
     return {
       bundles: parsedBundles,
       dependencies: dependencies,
-      messageChannels: messageChannels
+      messageChannels: messageChannels,
+      origin: instanceUrl 
     };
 
   } catch (error) {
@@ -318,7 +317,8 @@ async function fetchBundleSourceFiles(instanceUrl, sessionId, bundle) {
 }
 
 // ============================================================================
-// ENHANCED LWC DATA FLOW PARSER (INDUSTRY-LEVEL)
+// ENHANCED LWC DATA FLOW PARSER
+// With Improved Message Channel Detection
 // ============================================================================
 
 function parseLwcDataFlow(bundle) {
@@ -341,7 +341,7 @@ function parseLwcDataFlow(bundle) {
     // template.querySelector patterns
     querySelectorCalls: [],
 
-    // Lightning Message Service
+    // Lightning Message Service - ENHANCED
     lmsChannels: []
   };
 
@@ -391,36 +391,75 @@ function parseLwcDataFlow(bundle) {
       });
     }
 
-    // ---- Lightning Message Service patterns
-
-    // 1. Parse Imports to map variable names to Channel Names
+    // ============================================================
+    // ENHANCED LIGHTNING MESSAGE SERVICE PARSING
+    // ============================================================
+    
+    console.log(`📡 Parsing LMS for component: ${bundle.name}`);
+    
+    // Step 1: Build import map - variable name → channel name
+    // Patterns:
     // import SAMPLEMC from '@salesforce/messageChannel/SampleMessageChannel__c';
-    const lmsImportRegex = /import\s+(\w+)\s+from\s+['"]@salesforce\/messageChannel\/(\w+)(?:__c)?['"]/g;
-    const lmsMap = new Map(); // Variable -> ChannelName
+    // import MY_CHANNEL from '@salesforce/messageChannel/MyChannel__c';
+    const lmsImportMap = new Map(); // varName → channelName
+    
+    const lmsImportRegex = /import\s+(\w+)\s+from\s+['"`]@salesforce\/messageChannel\/([^'"`]+)['"`]/g;
     while ((m = lmsImportRegex.exec(js))) {
-      const rawName = m[2];
-      const cleanName = rawName.endsWith('__c') ? rawName.slice(0, -3) : rawName;
-      lmsMap.set(m[1], cleanName);
+      const varName = m[1];        // e.g., "SELECTMESSAGECHANNEL"
+      let channelName = m[2];      // e.g., "SelectMessageChannel__c"
+      
+      // Clean up the channel name - remove __c suffix if present
+      if (channelName.endsWith('__c')) {
+        channelName = channelName.slice(0, -3);
+      }
+      
+      lmsImportMap.set(varName, channelName);
+      console.log(`  📦 Import: ${varName} → ${channelName}`);
     }
 
-    const lmsPublishRegex = /publish\s*\(\s*this\.messageContext\s*,\s*(\w+)/g;
-    const lmsSubscribeRegex = /subscribe\s*\(\s*this\.messageContext\s*,\s*(\w+)/g;
-
-    while ((m = lmsPublishRegex.exec(js))) {
+    // Step 2: Find all publish() calls
+    // Pattern: publish(this.messageContext, CHANNEL_VAR, message)
+    const publishRegex = /publish\s*\(\s*[^,]+,\s*(\w+)/g;
+    while ((m = publishRegex.exec(js))) {
       const varName = m[1];
-      const channelName = lmsMap.get(varName) || varName; // Resolve or use as-is
-      result.lmsChannels.push({
-        channel: channelName,
-        type: 'publish'
-      });
+      const channelName = lmsImportMap.get(varName);
+      
+      if (channelName) {
+        console.log(`  ✅ PUBLISHER: ${bundle.name} publishes to ${channelName}`);
+        result.lmsChannels.push({
+          channel: channelName,
+          type: 'publish',
+          varName: varName
+        });
+      } else {
+        console.warn(`  ⚠️  Unknown channel variable in publish: ${varName}`);
+      }
     }
 
-    while ((m = lmsSubscribeRegex.exec(js))) {
+    // Step 3: Find all subscribe() calls
+    // Pattern: subscribe(this.messageContext, CHANNEL_VAR, callback)
+    const subscribeRegex = /subscribe\s*\(\s*[^,]+,\s*(\w+)/g;
+    while ((m = subscribeRegex.exec(js))) {
       const varName = m[1];
-      const channelName = lmsMap.get(varName) || varName; // Resolve or use as-is
-      result.lmsChannels.push({
-        channel: channelName,
-        type: 'subscribe'
+      const channelName = lmsImportMap.get(varName);
+      
+      if (channelName) {
+        console.log(`  ✅ SUBSCRIBER: ${bundle.name} subscribes to ${channelName}`);
+        result.lmsChannels.push({
+          channel: channelName,
+          type: 'subscribe',
+          varName: varName
+        });
+      } else {
+        console.warn(`  ⚠️  Unknown channel variable in subscribe: ${varName}`);
+      }
+    }
+
+    // Log summary
+    if (result.lmsChannels.length > 0) {
+      console.log(`  🎯 Total LMS channels for ${bundle.name}: ${result.lmsChannels.length}`);
+      result.lmsChannels.forEach(ch => {
+        console.log(`    - ${ch.type}: ${ch.channel}`);
       });
     }
   }
@@ -486,4 +525,4 @@ function kebabToCamel(str) {
   return str.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 }
 
-console.log("✅ Background service worker fully initialized (Refresh Fix Edition)");
+console.log("✅ Background service worker fully initialized (v5.2 - Enhanced Message Channel Parsing)");
